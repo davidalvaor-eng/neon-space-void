@@ -1,0 +1,199 @@
+@import "tailwindcss";
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: #04050f;
+  overflow: hidden;
+  overscroll-behavior: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  font-family: "Chakra Petch", ui-monospace, system-ui, sans-serif;
+  color: #e2f7ff;
+}
+
+button,
+input {
+  font-family: inherit;
+}
+
+#game-canvas {
+  display: block;
+  touch-action: none;
+}
+
+/* ---------- theme ---------- */
+
+.font-display {
+  font-family: "Orbitron", "Chakra Petch", ui-monospace, system-ui, sans-serif;
+}
+
+.nv-title-hot {
+  background: linear-gradient(180deg, #f0feff 0%, #67e8f9 42%, #818cf8 74%, #c084fc 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.nv-panel {
+  background: rgba(4, 8, 22, 0.78);
+  border: 1px solid rgba(103, 232, 249, 0.22);
+  border-radius: 1rem;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6), 0 0 40px rgba(34, 211, 238, 0.08);
+}
+
+.nv-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.8rem 1.6rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-size: 0.8rem;
+  color: #cffafe;
+  background: rgba(8, 20, 38, 0.72);
+  border: 1px solid rgba(103, 232, 249, 0.45);
+  border-radius: 0.6rem;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  box-shadow: 0 0 14px rgba(34, 211, 238, 0.18), inset 0 0 12px rgba(34, 211, 238, 0.08);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.nv-btn:hover {
+  color: #ffffff;
+  border-color: #67e8f9;
+  box-shadow: 0 0 24px rgba(34, 211, 238, 0.4), inset 0 0 18px rgba(34, 211, 238, 0.15);
+  transform: translateY(-1px);
+}
+
+.nv-btn:active {
+  transform: translateY(0) scale(0.98);
+}
+
+.nv-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.75;
+  transform: none;
+}
+
+.nv-btn-primary {
+  color: #022c3a;
+  background: linear-gradient(180deg, #a5f3fc, #22d3ee);
+  border-color: #a5f3fc;
+  box-shadow: 0 0 22px rgba(34, 211, 238, 0.5);
+}
+
+.nv-btn-primary:hover {
+  color: #02202c;
+  box-shadow: 0 0 36px rgba(34, 211, 238, 0.8);
+}
+
+.nv-btn-danger {
+  border-color: rgba(251, 113, 133, 0.5);
+  color: #fecdd3;
+}
+
+.nv-btn-danger:hover {
+  border-color: #fb7185;
+  box-shadow: 0 0 24px rgba(251, 113, 133, 0.35);
+}
+
+.nv-glow-btn {
+  animation: nv-pulse-glow 2.2s ease-in-out infinite;
+}
+
+.nv-input {
+  width: 11rem;
+  text-align: center;
+  background: rgba(2, 8, 23, 0.85);
+  border: 1px solid rgba(103, 232, 249, 0.4);
+  border-radius: 0.5rem;
+  padding: 0.55rem 0.75rem;
+  color: #e2f7ff;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.nv-input:focus {
+  border-color: #67e8f9;
+  box-shadow: 0 0 16px rgba(34, 211, 238, 0.35);
+}
+
+.scanlines {
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.22) 0px,
+    rgba(0, 0, 0, 0.22) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+}
+
+/* ---------- animations ---------- */
+
+@keyframes nv-pop {
+  0% {
+    transform: scale(1.45);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes nv-pulse-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 18px rgba(34, 211, 238, 0.45), 0 0 44px rgba(34, 211, 238, 0.18);
+  }
+  50% {
+    box-shadow: 0 0 32px rgba(34, 211, 238, 0.8), 0 0 70px rgba(34, 211, 238, 0.32);
+  }
+}
+
+@keyframes nv-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-9px);
+  }
+}
+
+@keyframes nv-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.nv-pop {
+  animation: nv-pop 0.18s ease-out;
+}
+
+.nv-float {
+  animation: nv-float 3.6s ease-in-out infinite;
+}
+
+.nv-fade-in {
+  animation: nv-fade-in 0.35s ease-out both;
+}
