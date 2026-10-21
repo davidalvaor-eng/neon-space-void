@@ -16,6 +16,23 @@ export const DOT_HEX: Record<DotColor, string> = {
   amber: "#fcd34d",
 };
 
+/** Power-ups: 0 vida · 1 triple · 2 cadencia · 3 escudo · 4 bomba */
+export const PICKUP_DEFS = [
+  { glyph: "❤️", color: "#fb7185", label: "+1 VIDA", dot: "pink" as DotColor },
+  { glyph: "🔱", color: "#fde047", label: "DISPARO TRIPLE", dot: "yellow" as DotColor },
+  { glyph: "🔥", color: "#fb923c", label: "CADENCIA x2", dot: "orange" as DotColor },
+  { glyph: "🛡️", color: "#c084fc", label: "ESCUDO", dot: "magenta" as DotColor },
+  { glyph: "💣", color: "#67e8f9", label: "BOMBA RECARGADA", dot: "cyan" as DotColor },
+];
+
+/** Jefes: nombre, color y radio */
+export const BOSS_DEFS = [
+  { name: "COLOSO", color: "#f87171", hp: 70, r: 36, speed: 42 },
+  { name: "VÓRTICE", color: "#818cf8", hp: 60, r: 32, speed: 70 },
+  { name: "COLMENA", color: "#a3e635", hp: 95, r: 40, speed: 30 },
+  { name: "SEGADOR", color: "#fb7185", hp: 75, r: 30, speed: 60 },
+];
+
 /** Paleta por jugador: [casco claro, casco medio, casco oscuro, brillo, bala] */
 export const PLAYER_PALETTES = [
   { light: "#eaffff", mid: "#22d3ee", dark: "#0e7490", glow: "rgba(103,232,249,.9)", bullet: "#fde047", bulletGlow: "rgba(250,204,21,.95)", hex: "#67e8f9", dot: "cyan" as DotColor },
@@ -253,6 +270,157 @@ export function buildSprites(): void {
     g.shadowColor = "#ffffff";
     g.shadowBlur = 10;
     g.fill();
+  });
+
+  /* ---------- jefes adicionales ---------- */
+  SPRITES.boss0 = SPRITES.boss;
+
+  // VÓRTICE
+  SPRITES.boss1 = canvasSprite(160, (g, s) => {
+    g.translate(s / 2, s / 2);
+    g.shadowColor = "rgba(129,140,248,.95)";
+    g.shadowBlur = 22;
+    g.strokeStyle = "#a5b4fc";
+    g.lineWidth = s * 0.045;
+    g.beginPath();
+    g.arc(0, 0, s * 0.4, 0, TAU);
+    g.stroke();
+    for (let i = 0; i < 4; i++) {
+      g.save();
+      g.rotate((i * Math.PI) / 2);
+      const grad = g.createLinearGradient(0, 0, s * 0.46, 0);
+      grad.addColorStop(0, "#e0e7ff");
+      grad.addColorStop(1, "#6366f1");
+      g.fillStyle = grad;
+      g.beginPath();
+      g.moveTo(s * 0.08, -s * 0.05);
+      g.quadraticCurveTo(s * 0.3, -s * 0.22, s * 0.47, -s * 0.02);
+      g.quadraticCurveTo(s * 0.28, -s * 0.02, s * 0.08, s * 0.06);
+      g.closePath();
+      g.fill();
+      g.restore();
+    }
+    const cg = g.createRadialGradient(0, 0, 0, 0, 0, s * 0.18);
+    cg.addColorStop(0, "#ffffff");
+    cg.addColorStop(0.5, "#818cf8");
+    cg.addColorStop(1, "#312e81");
+    g.fillStyle = cg;
+    g.beginPath();
+    g.arc(0, 0, s * 0.18, 0, TAU);
+    g.fill();
+    g.shadowBlur = 0;
+    g.fillStyle = "#1e1b4b";
+    g.beginPath();
+    g.arc(0, 0, s * 0.07, 0, TAU);
+    g.fill();
+  });
+
+  // COLMENA
+  SPRITES.boss2 = canvasSprite(160, (g, s) => {
+    g.translate(s / 2, s / 2);
+    const hex = (r: number) => {
+      g.beginPath();
+      for (let i = 0; i < 6; i++) {
+        const a = (Math.PI / 3) * i;
+        const x = Math.cos(a) * r;
+        const y = Math.sin(a) * r;
+        if (i) g.lineTo(x, y);
+        else g.moveTo(x, y);
+      }
+      g.closePath();
+    };
+    g.shadowColor = "rgba(190,242,100,.9)";
+    g.shadowBlur = 20;
+    const grad = g.createRadialGradient(0, 0, s * 0.05, 0, 0, s * 0.46);
+    grad.addColorStop(0, "#f7fee7");
+    grad.addColorStop(0.5, "#a3e635");
+    grad.addColorStop(1, "#365314");
+    hex(s * 0.45);
+    g.fillStyle = grad;
+    g.fill();
+    g.shadowBlur = 0;
+    g.strokeStyle = "rgba(236,252,203,.85)";
+    g.lineWidth = 2.5;
+    g.stroke();
+    g.fillStyle = "rgba(26,46,5,.85)";
+    for (let i = 0; i < 6; i++) {
+      const a = (Math.PI / 3) * i + Math.PI / 6;
+      g.save();
+      g.translate(Math.cos(a) * s * 0.25, Math.sin(a) * s * 0.25);
+      hex(s * 0.08);
+      g.fill();
+      g.restore();
+    }
+    hex(s * 0.1);
+    g.fillStyle = "#fef08a";
+    g.shadowColor = "#ffffff";
+    g.shadowBlur = 12;
+    g.fill();
+  });
+
+  // SEGADOR
+  SPRITES.boss3 = canvasSprite(160, (g, s) => {
+    g.translate(s / 2, s / 2);
+    g.shadowColor = "rgba(251,113,133,.95)";
+    g.shadowBlur = 22;
+    const grad = g.createLinearGradient(0, -s * 0.46, 0, s * 0.4);
+    grad.addColorStop(0, "#ffe4e6");
+    grad.addColorStop(0.45, "#fb7185");
+    grad.addColorStop(1, "#881337");
+    g.beginPath();
+    g.moveTo(0, -s * 0.47);
+    g.lineTo(s * 0.2, -s * 0.1);
+    g.lineTo(s * 0.44, s * 0.08);
+    g.lineTo(s * 0.2, s * 0.14);
+    g.lineTo(s * 0.3, s * 0.4);
+    g.lineTo(0, s * 0.24);
+    g.lineTo(-s * 0.3, s * 0.4);
+    g.lineTo(-s * 0.2, s * 0.14);
+    g.lineTo(-s * 0.44, s * 0.08);
+    g.lineTo(-s * 0.2, -s * 0.1);
+    g.closePath();
+    g.fillStyle = grad;
+    g.fill();
+    g.shadowBlur = 0;
+    g.strokeStyle = "rgba(255,228,230,.9)";
+    g.lineWidth = 2.5;
+    g.stroke();
+    g.beginPath();
+    g.moveTo(0, -s * 0.28);
+    g.lineTo(s * 0.08, 0);
+    g.lineTo(0, s * 0.1);
+    g.lineTo(-s * 0.08, 0);
+    g.closePath();
+    g.fillStyle = "#4c0519";
+    g.fill();
+    g.beginPath();
+    g.arc(0, -s * 0.04, s * 0.04, 0, TAU);
+    g.fillStyle = "#ffffff";
+    g.shadowColor = "#ffffff";
+    g.shadowBlur = 10;
+    g.fill();
+  });
+
+  /* ---------- power-ups ---------- */
+  PICKUP_DEFS.forEach((def, i) => {
+    SPRITES["pick" + i] = canvasSprite(64, (g, s) => {
+      g.translate(s / 2, s / 2);
+      g.shadowColor = def.color;
+      g.shadowBlur = 14;
+      g.fillStyle = "rgba(8,12,30,.85)";
+      g.beginPath();
+      g.arc(0, 0, s * 0.3, 0, TAU);
+      g.fill();
+      g.strokeStyle = def.color;
+      g.lineWidth = 3;
+      g.stroke();
+      g.shadowBlur = 0;
+      g.font = `${Math.round(s * 0.32)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
+      g.textAlign = "center";
+      g.textBaseline = "middle";
+      g.fillStyle = "#ffffff";
+      g.fillText(def.glyph, 0, s * 0.02);
+    });
   });
 
   // glowing dots (additive particles)

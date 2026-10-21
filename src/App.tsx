@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ShooterGame, type HudState, type RunInfo } from "./game/game";
+import { ShooterGame, DIFF_NAMES, EMOTES, type HudState, type RunInfo, type MatchOpts } from "./game/game";
 import { getScores, saveScore, getPilotName, setPilotName, type ScoreEntry } from "./game/storage";
 import { initAudio, isMuted, toggleMuted, sfx } from "./game/audio";
 import { HostSession, GuestSession, normalizeCode, MAX_PLAYERS, type LobbyPlayer, type NetMsg } from "./game/net";
@@ -30,7 +30,17 @@ const BASE_HUD: HudState = {
   players: [],
   localAlive: true,
   respawnIn: 0,
+  reviveIn: 0,
+  spreadT: 0,
+  rapidT: 0,
+  shield: false,
+  bosses: [],
+  bossKills: 0,
+  opts: { diff: 0, rush: false },
 };
+
+const DIFF_COLORS = ["#67e8f9", "#fb923c", "#f43f5e"];
+const DIFF_DESC = ["Equilibrado", "Más vida y balas rápidas · x1.5 pts", "Infierno de balas · x2 pts"];
 
 function formatTime(s: number): string {
   const m = Math.floor(s / 60);
@@ -82,6 +92,8 @@ export default function App() {
   const [netError, setNetError] = useState("");
   const [copied, setCopied] = useState(false);
   const [leaveConfirm, setLeaveConfirm] = useState(false);
+  const [matchOpts, setMatchOpts] = useState<MatchOpts>({ diff: 0, rush: false });
+  const optsRef = useRef<MatchOpts>({ diff: 0, rush: false });
 
   // fin de partida
   const [run, setRun] = useState<RunInfo | null>(null);
@@ -159,7 +171,16 @@ export default function App() {
   /* ---------- fin de partida ---------- */
 
   const publish = useCallback(
-    async (entry: { name: string; score: number; mode: "solo" | "coop"; players: number; time: number }) => {
+    async (entry: {
+      name: string;
+      score: number;
+      mode: "solo" | "coop";
+      players: number;
+      time: number;
+      diff?: number;
+      rush?: boolean;
+      bosses?: number;
+    }) => {
       if (entry.score <= 0) {
         setSubmit("skip");
         return;
@@ -199,9 +220,18 @@ export default function App() {
     if (info.score > 0) setLocalScores(saveScore(label, info.score, coop ? "coop" : "solo"));
     if (s instanceof HostSession) {
       s.broadcast({ t: "over", g: gameIdRef.current, sc: info.score, el: info.time });
-      void publish({ name: label, score: info.score, mode: "coop", players: info.players, time: info.time });
+      void publish({
+        name: label,
+        score: info.score,
+        mode: "coop",
+        players: info.players,
+        time: info.time,
+        diff: info.diff,
+        rush: info.rush,
+        bosses: info.bossKills,
+      });
     } else if (!coop) {
-      void publish({ name, score: info.score, mode: "solo", players: 1, time: info.time });
+      void publish({ name, score: info.score, mode: "solo", players: 1, time: info.time, bosses: info.bossKills });
     } else {
       setSubmit("skip"); // el anfitrión publica la puntuación del equipo
     }
@@ -234,8 +264,9 @@ export default function App() {
     (document.activeElement as HTMLElement | null)?.blur();
     gameIdRef.current++;
     const players = s.players.map((p) => ({ ...p }));
-    gameRef.current?.startHost(players, s.localId, gameIdRef.current);
-    s.broadcast({ t: "start", g: gameIdRef.current, players });
+    const opts = { ...optsRef.current };
+    gameRef.current?.startHost(players, s.localId, gameIdRef.current, opts);
+    s.broadcast({ t: "start", g: gameIdRef.current, players, opts });
     setLeaveConfirm(false);
     lastMult.current = 1;
     go("playing");
@@ -287,6 +318,23 @@ export default function App() {
   const doBomb = useCallback(() => gameRef.current?.triggerBomb(), []);
   const doDash = useCallback(() => gameRef.current?.triggerDash(), []);
 
+  const doEmote = useCallback((idx: number) => {
+    const g = gameRef.current;
+    const s = sessionRef.current;
+    if (!g || !s) return;
+    if (g.triggerEmote(idx) && s instanceof GuestSession) s.send({ t: "emo", e: idx });
+  }, []);
+
+  /** El anfitrión cambia dificultad / modo y lo comunica a la sala. */
+  const changeOpts = useCallback((patch: Partial<MatchOpts>) => {
+    const next = { ...optsRef.current, ...patch };
+    optsRef.current = next;
+    setMatchOpts(next);
+    const s = sessionRef.current;
+    if (s instanceof HostSession) s.broadcast({ t: "opts", opts: next });
+    sfx.ui();
+  }, []);
+
   /* ---------- crear / unirse a sala ---------- */
 
   const createRoom = useCallback(async () => {
@@ -303,10 +351,11 @@ export default function App() {
       s.onLobby = (pl) => setLobby(pl);
       s.onJoin = (p) => {
         sfx.join();
+        s.send(p.id, { t: "opts", opts: optsRef.current });
         const g = gameRef.current;
         if (g && g.role === "host" && (g.phase === "playing" || g.phase === "dying")) {
           g.addPlayer(p);
-          s.send(p.id, { t: "start", g: gameIdRef.current, players: s.players });
+          s.send(p.id, { t: "start", g: gameIdRef.current, players: s.players, opts: optsRef.current });
         }
       };
       s.onLeave = (p) => {
@@ -315,6 +364,7 @@ export default function App() {
       };
       s.onMessage = (id, msg: NetMsg) => {
         if (msg.t === "i") gameRef.current?.applyRemoteInput(id, msg);
+        else if (msg.t === "emo") gameRef.current?.remoteEmote(id, Number(msg.e) || 0);
       };
       go("lobby");
       sfx.join();
@@ -349,9 +399,19 @@ export default function App() {
             case "lobby":
               setLobby(msg.players || []);
               break;
+            case "opts":
+              if (msg.opts) {
+                optsRef.current = { diff: Number(msg.opts.diff) || 0, rush: !!msg.opts.rush };
+                setMatchOpts(optsRef.current);
+              }
+              break;
             case "start":
               gameIdRef.current = msg.g;
-              g.startGuest(msg.players || [], s.localId, msg.g);
+              if (msg.opts) {
+                optsRef.current = { diff: Number(msg.opts.diff) || 0, rush: !!msg.opts.rush };
+                setMatchOpts(optsRef.current);
+              }
+              g.startGuest(msg.players || [], s.localId, msg.g, optsRef.current);
               setLeaveConfirm(false);
               lastMult.current = 1;
               go("playing");
@@ -447,6 +507,10 @@ export default function App() {
         doDash();
         return;
       }
+      if (["1", "2", "3", "4"].includes(k) && sc === "playing") {
+        doEmote(Number(k) - 1);
+        return;
+      }
       if (k === "enter" || k === " ") {
         if (tag === "BUTTON") return;
         if (sc === "menu" || (sc === "over" && !sessionRef.current)) startSolo();
@@ -481,7 +545,7 @@ export default function App() {
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("blur", onBlur);
     };
-  }, [startSolo, startMatch, pauseGame, resumeGame, doBomb, doDash, go]);
+  }, [startSolo, startMatch, pauseGame, resumeGame, doBomb, doDash, doEmote, go]);
 
   useEffect(() => {
     const onVis = () => {
@@ -569,13 +633,29 @@ export default function App() {
               </div>
               <div className="flex items-center gap-2 text-[10px] tracking-widest text-cyan-100/60 sm:text-xs">
                 {isMP ? (
-                  <span className="text-fuchsia-200/80">CO-OP · SALA {roomCode}</span>
+                  <span className="text-fuchsia-200/80">SALA {roomCode}</span>
                 ) : (
                   <span>MEJOR {hud.best.toLocaleString()}</span>
                 )}
                 <span>•</span>
                 <span>{formatTime(hud.elapsed)}</span>
+                {hud.bossKills > 0 && (
+                  <span key={hud.bossKills} className="nv-pop text-amber-300">☠ {hud.bossKills}</span>
+                )}
               </div>
+              {isMP && (
+                <div className="flex flex-wrap gap-1 text-[9px] tracking-widest">
+                  <span
+                    className="rounded border px-1.5 py-0.5"
+                    style={{ color: DIFF_COLORS[hud.opts.diff], borderColor: DIFF_COLORS[hud.opts.diff] + "66" }}
+                  >
+                    {DIFF_NAMES[hud.opts.diff]}
+                  </span>
+                  {hud.opts.rush && (
+                    <span className="rounded border border-rose-400/50 px-1.5 py-0.5 text-rose-300">JEFES SIN FIN</span>
+                  )}
+                </div>
+              )}
               {hud.combo > 1 && (
                 <div className="flex flex-col gap-1 self-start">
                   <div
@@ -628,7 +708,13 @@ export default function App() {
                         {p.local ? " (TÚ)" : ""}
                       </span>
                       <span className="ml-auto text-rose-400">
-                        {p.alive ? "♥".repeat(p.hp) : p.respawn > 0 ? `↻${Math.ceil(p.respawn)}s` : "✕"}
+                        {p.alive
+                          ? "♥".repeat(p.hp)
+                          : p.revive > 0
+                            ? `✚${Math.round(p.revive * 100)}%`
+                            : p.respawn > 0
+                              ? `↻${Math.ceil(p.respawn)}s`
+                              : "✕"}
                       </span>
                       <span className="w-8 text-right text-cyan-100/50">{p.kills}☠</span>
                     </div>
@@ -653,7 +739,49 @@ export default function App() {
                 ♥
               </span>
             ))}
+            {hud.shield && (
+              <span className="ml-1 text-lg" style={{ filter: "drop-shadow(0 0 6px #c084fc)" }}>
+                🛡️
+              </span>
+            )}
           </div>
+
+          {/* mejoras activas */}
+          {(hud.spreadT > 0 || hud.rapidT > 0) && hud.localAlive && (
+            <div className={`absolute left-4 flex gap-1.5 ${touchMode ? "bottom-[13rem]" : "bottom-14"}`}>
+              {hud.spreadT > 0 && (
+                <span className="rounded-md border border-yellow-300/50 bg-yellow-400/10 px-2 py-0.5 text-[10px] font-bold tracking-widest text-yellow-200">
+                  🔱 TRIPLE {Math.ceil(hud.spreadT)}s
+                </span>
+              )}
+              {hud.rapidT > 0 && (
+                <span className="rounded-md border border-orange-300/50 bg-orange-400/10 px-2 py-0.5 text-[10px] font-bold tracking-widest text-orange-200">
+                  🔥 x2 {Math.ceil(hud.rapidT)}s
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* emotes rápidos (solo online) */}
+          {isMP && screen === "playing" && (
+            <div className="pointer-events-auto absolute top-1/2 right-3 flex -translate-y-1/2 flex-col gap-2">
+              {EMOTES.map((em, i) => (
+                <button
+                  key={em}
+                  onClick={() => doEmote(i)}
+                  className="relative flex h-10 w-10 items-center justify-center rounded-full border border-cyan-300/25 bg-slate-950/60 text-lg backdrop-blur-sm transition hover:scale-110 hover:border-cyan-300/60 active:scale-95"
+                  aria-label={`Emote ${em}`}
+                >
+                  {em}
+                  {!touchMode && (
+                    <span className="absolute -bottom-1 -left-1 rounded bg-slate-900 px-1 text-[8px] text-cyan-100/60">
+                      {i + 1}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
 
           {screen === "playing" && hud.localAlive && (
             <>
@@ -692,9 +820,20 @@ export default function App() {
                 DERRIBADO
               </div>
               <div className="text-[11px] tracking-widest text-cyan-100/70">
-                {hud.respawnIn > 0
-                  ? `REAPARECES EN ${Math.ceil(hud.respawnIn)}s · ¡AGUANTAD!`
-                  : "ESPECTANDO A TU EQUIPO…"}
+                UN COMPAÑERO PUEDE REANIMARTE ACERCÁNDOSE A TUS RESTOS
+              </div>
+              <div className="mt-1 h-2 w-48 overflow-hidden rounded-full bg-slate-800/80">
+                <div
+                  className="h-full bg-gradient-to-r from-emerald-400 to-cyan-300 transition-[width] duration-100"
+                  style={{ width: `${Math.round(hud.reviveIn * 100)}%` }}
+                />
+              </div>
+              <div className="text-[10px] tracking-widest text-cyan-100/50">
+                {hud.reviveIn > 0
+                  ? `REANIMANDO… ${Math.round(hud.reviveIn * 100)}%`
+                  : hud.respawnIn > 0
+                    ? `O REAPARECES SOLO EN ${Math.ceil(hud.respawnIn)}s`
+                    : "ESPECTANDO A TU EQUIPO…"}
               </div>
             </div>
           )}
@@ -797,7 +936,14 @@ export default function App() {
                   Encadena bajas en 1.6s para <b className="text-amber-300">COMBOS hasta x5</b> · Élites doradas = x3 pts
                 </li>
                 <li>
-                  <b className="text-fuchsia-300">CO-OP</b> — hasta 4 pilotos; los caídos reaparecen si alguien sobrevive
+                  <b className="text-cyan-200">POWER-UPS</b> — ❤️ vida · 🔱 triple · 🔥 cadencia · 🛡️ escudo · 💣 bomba
+                </li>
+                <li>
+                  <b className="text-rose-300">4 JEFES</b> — Coloso, Vórtice, Colmena y Segador; ¡se enfurecen al 50%!
+                </li>
+                <li>
+                  <b className="text-fuchsia-300">CO-OP</b> — hasta 4 pilotos · acércate a un compañero caído para
+                  reanimarlo · emotes con 1-4 · dificultad y modo Jefes sin fin
                 </li>
               </ul>
             </div>
@@ -939,6 +1085,61 @@ export default function App() {
               })}
             </div>
 
+            {/* opciones de partida */}
+            <div className="flex flex-col gap-2 rounded-lg border border-cyan-300/15 bg-slate-900/40 p-3">
+              <div className="flex items-center justify-between text-[10px] tracking-[0.3em] text-cyan-200/60">
+                <span>DIFICULTAD</span>
+                {!isHost && <span className="tracking-widest text-cyan-100/40">ELIGE EL ANFITRIÓN</span>}
+              </div>
+              <div className="grid grid-cols-3 gap-1.5">
+                {DIFF_NAMES.map((d, i) => {
+                  const active = matchOpts.diff === i;
+                  return (
+                    <button
+                      key={d}
+                      disabled={!isHost}
+                      onClick={() => changeOpts({ diff: i })}
+                      className={`rounded-md border px-1 py-2 text-[10px] font-bold tracking-widest transition ${
+                        active ? "bg-white/10" : "border-transparent bg-slate-950/40 opacity-60"
+                      } ${isHost ? "hover:opacity-100" : "cursor-default"}`}
+                      style={{
+                        color: DIFF_COLORS[i],
+                        borderColor: active ? DIFF_COLORS[i] : undefined,
+                        boxShadow: active ? `0 0 14px ${DIFF_COLORS[i]}55` : undefined,
+                      }}
+                    >
+                      {d}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="text-center text-[10px] tracking-wide text-cyan-100/50">{DIFF_DESC[matchOpts.diff]}</div>
+              <div className="mt-1 text-[10px] tracking-[0.3em] text-cyan-200/60">MODO</div>
+              <div className="grid grid-cols-2 gap-1.5">
+                {[
+                  { rush: false, label: "🌊 SUPERVIVENCIA", desc: "Oleadas + jefe cada ~40s" },
+                  { rush: true, label: "👹 JEFES SIN FIN", desc: "Jefe tras jefe, por parejas" },
+                ].map((m) => {
+                  const active = matchOpts.rush === m.rush;
+                  return (
+                    <button
+                      key={m.label}
+                      disabled={!isHost}
+                      onClick={() => changeOpts({ rush: m.rush })}
+                      className={`flex flex-col items-center gap-0.5 rounded-md border px-1 py-2 transition ${
+                        active
+                          ? "border-fuchsia-300/70 bg-fuchsia-400/10 text-fuchsia-100 shadow-[0_0_14px_rgba(232,121,249,.3)]"
+                          : "border-transparent bg-slate-950/40 text-cyan-100/50"
+                      } ${isHost ? "hover:text-cyan-50" : "cursor-default"}`}
+                    >
+                      <span className="text-[10px] font-bold tracking-widest">{m.label}</span>
+                      <span className="text-[9px] tracking-wide opacity-70">{m.desc}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             {isHost ? (
               <button className="nv-btn nv-btn-primary nv-glow-btn !py-3.5 text-base" onClick={startMatch}>
                 ▶ EMPEZAR PARTIDA {lobby.length === 1 ? "(SOLO TÚ)" : `(${lobby.length})`}
@@ -954,7 +1155,7 @@ export default function App() {
             </button>
             {isHost && (
               <div className="text-center text-[10px] tracking-wide text-cyan-100/40">
-                Los amigos también pueden unirse en mitad de la partida.
+                Los amigos también pueden unirse en mitad de la partida. Más pilotos = jefes más duros y más puntos.
               </div>
             )}
           </div>
@@ -999,6 +1200,22 @@ export default function App() {
             <div className="text-[10px] tracking-widest text-cyan-100/50">
               SOBREVIVISTE {formatTime(run.time)}
               {!isMP && ` · MEJOR LOCAL ${Math.max(hud.best, run.score).toLocaleString()}`}
+            </div>
+            <div className="flex flex-wrap justify-center gap-1.5 text-[10px] font-bold tracking-widest">
+              <span className="rounded-md border border-amber-300/50 bg-amber-400/10 px-2 py-1 text-amber-200">
+                ☠ {run.bossKills} JEFE{run.bossKills === 1 ? "" : "S"} DERROTADO{run.bossKills === 1 ? "" : "S"}
+              </span>
+              {isMP && (
+                <span
+                  className="rounded-md border px-2 py-1"
+                  style={{ color: DIFF_COLORS[run.diff], borderColor: DIFF_COLORS[run.diff] + "80" }}
+                >
+                  {DIFF_NAMES[run.diff]}
+                </span>
+              )}
+              {isMP && run.rush && (
+                <span className="rounded-md border border-rose-400/50 px-2 py-1 text-rose-300">JEFES SIN FIN</span>
+              )}
             </div>
 
             {isMP && hud.players.length > 0 && (

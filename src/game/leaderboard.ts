@@ -27,6 +27,9 @@ export interface GlobalEntry {
   time: number;
   date: number;
   mine: boolean;
+  diff: number; // 0 normal · 1 difícil · 2 pesadilla
+  rush: boolean; // modo jefes sin fin
+  bosses: number;
 }
 
 const RELAYS = [
@@ -88,7 +91,8 @@ function plausible(score: number, time: number, players: number): boolean {
   if (!Number.isFinite(time) || time < 1 || time > 4 * 3600) return false;
   if (!Number.isFinite(players) || players < 1 || players > 4) return false;
   // tope generoso de puntos por segundo para filtrar trampas obvias
-  return score <= 1500 + time * 450 * players;
+  // (incluye multiplicador de dificultad y jefes en cadena)
+  return score <= 6000 + time * 1100 * players;
 }
 
 /* ---------------- relay I/O ---------------- */
@@ -174,6 +178,11 @@ function relayPublish(url: string, ev: NostrEvent, timeoutMs: number): Promise<b
 
 /* ---------------- parsing ---------------- */
 
+function clampInt(v: unknown, a: number, b: number): number {
+  const n = Math.floor(Number(v) || 0);
+  return n < a ? a : n > b ? b : n;
+}
+
 function parseEvent(ev: NostrEvent): Omit<GlobalEntry, "mine"> | null {
   try {
     if (ev.kind !== KIND) return null;
@@ -194,6 +203,9 @@ function parseEvent(ev: NostrEvent): Omit<GlobalEntry, "mine"> | null {
       players,
       time,
       date: ev.created_at * 1000,
+      diff: clampInt(c.d, 0, 2),
+      rush: c.x === 1,
+      bosses: clampInt(c.b, 0, 999),
     };
   } catch {
     return null;
@@ -267,6 +279,9 @@ export async function submitGlobal(entry: {
   mode: GameMode;
   players: number;
   time: number;
+  diff?: number;
+  rush?: boolean;
+  bosses?: number;
 }): Promise<{ id: string; relays: number }> {
   const score = Math.floor(entry.score);
   const time = Math.max(1, Math.round(entry.time));
@@ -289,6 +304,9 @@ export async function submitGlobal(entry: {
         m: entry.mode,
         p: players,
         t: time,
+        d: clampInt(entry.diff, 0, 2),
+        x: entry.rush ? 1 : 0,
+        b: clampInt(entry.bosses, 0, 999),
       }),
     },
     sk

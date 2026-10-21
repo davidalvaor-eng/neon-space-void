@@ -8,6 +8,12 @@ import { getScores, type ScoreEntry } from "../game/storage";
 
 type Tab = "solo" | "coop" | "local";
 
+const DIFF_TAG = [
+  { t: "NORMAL", c: "#67e8f9" },
+  { t: "DIFÍCIL", c: "#fb923c" },
+  { t: "PESADILLA", c: "#f43f5e" },
+];
+
 function fmtTime(s: number): string {
   const m = Math.floor(s / 60);
   return `${m}:${Math.floor(s % 60).toString().padStart(2, "0")}`;
@@ -91,9 +97,21 @@ function GlobalTable({ entries, mode }: { entries: GlobalEntry[]; mode: "solo" |
               {e.name}
               {e.mine && <span className="ml-1 text-[9px] text-cyan-300">(TÚ)</span>}
             </span>
-            <span className="block text-[9px] text-cyan-100/40">
-              {fmtTime(e.time)} · {fmtDate(e.date)}
-              {mode === "coop" && ` · ${e.players}P`}
+            <span className="flex flex-wrap items-center gap-1 text-[9px] text-cyan-100/40">
+              <span>
+                {fmtTime(e.time)} · {fmtDate(e.date)}
+                {mode === "coop" && ` · ${e.players}P`}
+              </span>
+              {e.bosses > 0 && <span className="text-amber-300/80">☠{e.bosses}</span>}
+              {e.diff > 0 && (
+                <span
+                  className="rounded px-1"
+                  style={{ color: DIFF_TAG[e.diff].c, background: DIFF_TAG[e.diff].c + "22" }}
+                >
+                  {DIFF_TAG[e.diff].t}
+                </span>
+              )}
+              {e.rush && <span className="rounded bg-rose-500/15 px-1 text-rose-300">JEFES</span>}
             </span>
           </span>
           <span className="font-bold">{e.score.toLocaleString()}</span>

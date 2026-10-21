@@ -143,6 +143,20 @@ export const sfx = {
     setTimeout(() => tone(990, 1480, "sine", 0.1, 0.05), 90);
   },
   leave: () => tone(520, 260, "sine", 0.15, 0.05),
+  pickup: () => {
+    tone(700, 1400, "square", 0.06, 0.025);
+    setTimeout(() => tone(1050, 2100, "sine", 0.09, 0.04), 60);
+  },
+  shieldBreak: () => {
+    tone(1800, 300, "triangle", 0.2, 0.05);
+    noiseBurst(0.12, 0.05, "highpass", 2500);
+  },
+  enrage: () => {
+    tone(90, 50, "sawtooth", 0.7, 0.09);
+    setTimeout(() => tone(140, 70, "square", 0.5, 0.05), 120);
+  },
+  emote: () => tone(1180, 1580, "sine", 0.07, 0.035),
+  charge: () => tone(220, 880, "sawtooth", 0.35, 0.04),
   respawn: () => {
     tone(330, 880, "triangle", 0.25, 0.05);
     setTimeout(() => tone(880, 1320, "sine", 0.12, 0.04), 160);
